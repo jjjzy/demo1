@@ -1,0 +1,30 @@
+[
+  {
+    "category": "market",
+    "options": ["US", "EU", "Asia"]
+  },
+  {
+    "category": "language",
+    "options": ["EN", "CN", "FR"]
+  },
+  {
+    "category": "client",
+    "options": ["MYCA", "ABC", "XYZ"]
+  },
+  {
+    "category": "channel",
+    "options": ["WEB", "APP"]
+  },
+  {
+    "category": "page",
+    "options": ["Mobile", "Desktop"]
+  },
+  {
+    "category": "placement",
+    "options": ["ETD", "TOP", "BOTTOM"]
+  },
+  {
+    "category": "domain",
+    "options": ["domain1", "domain2", "domain3"]
+  }
+]

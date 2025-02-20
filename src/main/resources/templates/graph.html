@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force-Directed Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        svg {
+            width: 100%;
+            height: 500px;
+            border: 1px solid black;
+        }
+        .node circle {
+            fill: steelblue;
+            stroke: white;
+            stroke-width: 1.5px;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>选择数据 Key 以更新图形</h2>
+
+<div id="dropdown-container">
+    <div th:each="dropdown : ${dropdownOptions}">
+        <label th:text="${dropdown['category']} + ':'"></label>
+        <select th:attr="data-category=${dropdown['category']}">
+            <option th:each="option : ${dropdown['options']}" th:value="${option}" th:text="${option}"></option>
+        </select>
+        <br>
+    </div>
+</div>
+
+<p><strong>当前 Key:</strong> <span id="key-display"></span></p>
+
+<svg></svg>
+
+<script th:inline="javascript">
+    const width = window.innerWidth, height = 500;
+    const svg = d3.select("svg").attr("width", width).attr("height", height);
+    const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(width / 2, height / 2));
+
+    let linkGroup = svg.append("g").attr("class", "links");
+    let nodeGroup = svg.append("g").attr("class", "nodes");
+
+    function updateGraph(data) {
+        let nodes = [];
+        let links = [];
+
+        Object.keys(data).forEach(source => {
+            let targets = data[source];
+            targets.forEach(target => {
+                nodes.push({ id: source });
+                nodes.push({ id: target });
+                links.push({ source, target });
+            });
+        });
+
+        nodes = Array.from(new Set(nodes.map(d => d.id))).map(id => ({ id }));
+
+        let link = linkGroup.selectAll(".link").data(links);
+        let node = nodeGroup.selectAll(".node").data(nodes);
+
+        link.exit().remove();
+        link.enter().append("line").attr("class", "link").merge(link);
+
+        node.exit().remove();
+        let nodeEnter = node.enter().append("g").attr("class", "node")
+            .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
+
+        nodeEnter.append("circle").attr("r", 10);
+        nodeEnter.append("text").attr("x", 12).attr("y", 4).text(d => d.id);
+
+        node = nodeEnter.merge(node);
+        link = linkGroup.selectAll(".link");
+
+        simulation.nodes(nodes).on("tick", () => {
+            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        simulation.force("link").links(links);
+        simulation.alpha(1).restart();
+    }
+
+    function dragStarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragEnded(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    document.getElementById("dropdown-container").addEventListener("change", function() {
+        let key = Array.from(document.querySelectorAll("select")).map(s => s.getAttribute("data-category") + ":" + s.value).join("|");
+        document.getElementById("key-display").textContent = key;
+        fetch(`/api/getData?key=${encodeURIComponent(key)}`).then(response => response.json()).then(data => updateGraph(data));
+    });
+
+</script>
+
+</body>
+</html>
