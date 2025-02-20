@@ -17,34 +17,20 @@ public class GraphController {
     private static final String GRAPH_JSON_PATH = "graphData.json";
     private static final String OPTIONS_JSON_PATH = "options.json";
 
-    /**
-     * 返回 HTML 页面，并提供 Dropdown 选项
-     */
     @GetMapping("/graph")
     public String graphPage(Model model) {
         List<Map<String, Object>> dropdownOptions = loadOptionsData();
         model.addAttribute("dropdownOptions", dropdownOptions);
-        return "graph"; // 渲染 graph.html
+        return "index";
     }
 
-    /**
-     * 获取 Graph 数据，并转换为正确的格式
-     */
     @GetMapping("/getData")
     @ResponseBody
     public Map<String, List<String>> getGraphData(@RequestParam String key) {
         Map<String, Map<String, List<String>>> jsonData = loadGraphData();
-
-        // 获取 key 对应的数据
-        Map<String, List<String>> rawEdges = jsonData.getOrDefault(key, new HashMap<>());
-
-        // 转换为正确的 "source-target" 结构
-        return transformEdges(rawEdges);
+        return jsonData.getOrDefault(key, new HashMap<>()); // 直接返回数据，不转换
     }
 
-    /**
-     * 读取 Graph JSON 数据
-     */
     private Map<String, Map<String, List<String>>> loadGraphData() {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -56,9 +42,6 @@ public class GraphController {
         }
     }
 
-    /**
-     * 读取 Dropdown 选项 JSON
-     */
     private List<Map<String, Object>> loadOptionsData() {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -70,25 +53,19 @@ public class GraphController {
         }
     }
 
-    /**
-     * 转换 JSON 数据结构，使其符合 "source-target" 逻辑
-     */
-    private Map<String, List<String>> transformEdges(Map<String, List<String>> rawEdges) {
-        List<String> nodes = new ArrayList<>();
+    @GetMapping("/getAllNodes")
+    @ResponseBody
+    public Set<String> getAllNodes() {
+        Map<String, Map<String, List<String>>> jsonData = loadGraphData();
+        Set<String> allNodes = new HashSet<>();
 
-        // 先收集所有节点的顺序
-        for (List<String> values : rawEdges.values()) {
-            nodes.addAll(values);
-        }
+        jsonData.values().forEach(edges -> edges.forEach((source, targets) -> {
+//            allNodes.add(source);
+            allNodes.addAll(targets);
+        }));
 
-        // 生成 source-target 连接
-        Map<String, List<String>> transformedGraph = new HashMap<>();
-        for (int i = 0; i < nodes.size() - 1; i++) {
-            String source = nodes.get(i);
-            String target = nodes.get(i + 1);
-            transformedGraph.computeIfAbsent(source, k -> new ArrayList<>()).add(target);
-        }
 
-        return transformedGraph;
+
+        return allNodes;
     }
 }

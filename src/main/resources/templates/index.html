@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force-Directed Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        svg {
+            width: 100%;
+            height: 500px;
+            border: 1px solid black;
+        }
+        .node circle {
+            fill: steelblue;
+            stroke: white;
+            stroke-width: 1.5px;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+            marker-end: url(#arrow);
+        }
+        text {
+            font-size: 12px;
+            text-anchor: middle;
+            fill: black;
+        }
+    </style>
+</head>
+<body>
+
+<div id="dropdown-container">
+    <div th:each="dropdown : ${dropdownOptions}">
+        <label th:text="${dropdown['category']} + ':'"></label>
+        <select th:attr="data-category=${dropdown['category']}">
+            <option value="">Please select</option>
+            <option th:each="option : ${dropdown['options']}" th:value="${option}" th:text="${option}"></option>
+        </select>
+        <br>
+    </div>
+</div>
+
+<svg>
+    <defs>
+<!--        <marker id="arrow" viewBox="0 0 10 10" refX="16" refY="5"-->
+<!--                markerWidth="6" markerHeight="6" orient="auto-start-reverse">-->
+<!--            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#999"></path>-->
+<!--        </marker>-->
+    </defs>
+</svg>
+
+<script th:inline="javascript">
+    let width = window.innerWidth;
+    let height = 500;
+    const centerY = height / 2;
+    const circleRadius = 10; // 固定圆的大小
+
+    const svg = d3.select("svg").attr("width", width).attr("height", height);
+
+    let simulation;
+
+    let linkGroup = svg.append("g").attr("class", "links");
+    let nodeGroup = svg.append("g").attr("class", "nodes");
+
+    let allNodes;
+
+    function transformEdges(rawEdges) {
+        let nodes = [];
+        let links = [];
+
+        Object.keys(rawEdges).forEach(edge => {
+            rawEdges[edge].forEach(node => {
+                nodes.push(node);
+            });
+        });
+
+        for (let i = 0; i < nodes.length - 1; i++) {
+            links.push({ source: nodes[i], target: nodes[i + 1] });
+        }
+
+        return { nodes, links };
+    }
+
+    function updateGraph(rawEdges) {
+        console.log("rawedge", rawEdges)
+
+        let allNodePrev = allNodes;
+
+        if (Object.keys(rawEdges).length === 0) {
+            linkGroup.selectAll(".link")
+                .attr("marker-end", null)
+                .remove();
+
+            simulation.force("link", null);
+            console.log("prev", allNodePrev)
+            let node = nodeGroup.selectAll(".node").data(allNodePrev);
+
+            node.exit().remove();
+            let nodeEnter = node.enter().append("g").attr("class", "node")
+                .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
+
+            nodeEnter.append("circle").attr("r", circleRadius);
+            nodeEnter.append("text")
+                .attr("x", 0)
+                .attr("y", -circleRadius - 5)
+                .text(d => d.id);
+
+            node = nodeEnter.merge(node);
+
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id))
+                .force("charge", d3.forceManyBody());
+
+            simulation.nodes(allNodePrev).on("tick", () => {
+                node.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            simulation.alpha(1).restart();
+        } else {
+            const { nodes, links } = transformEdges(rawEdges);
+
+            let link = linkGroup.selectAll(".link").data(links);
+
+            let node = nodeGroup.selectAll(".node").data(allNodes);
+
+            console.log("nodes", nodes)
+            console.log("all nodes", allNodes)
+            console.log("links", link)
+
+
+            console.log("here")
+            link.exit().remove();
+            link.enter().append("line")
+                .attr("class", "link")
+                .attr("marker-end", "url(#arrow)")
+                .merge(link);
+
+            node.exit().remove();
+            let nodeEnter = node.enter().append("g").attr("class", "node")
+                .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
+
+            nodeEnter.append("circle").attr("r", circleRadius);
+
+            nodeEnter.append("text")
+                .attr("x", 0)  // 保持 x 轴对齐
+                .attr("y", -circleRadius - 5)
+                .text(d => d.id);
+
+            node = nodeEnter.merge(node);
+            link = linkGroup.selectAll(".link");
+
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(150))
+                .force("charge", d3.forceManyBody().strength(-50))
+
+            // simulation.nodes(allNodes).on("tick", () => {
+            //     link.attr("x1", d => adjustLinkPosition(d.source, d.target).x1)
+            //         .attr("y1", d => adjustLinkPosition(d.source, d.target).y1)
+            //         .attr("x2", d => adjustLinkPosition(d.source, d.target).x2)
+            //         .attr("y2", d => adjustLinkPosition(d.source, d.target).y2);
+            //
+            //     node.attr("transform", d => `translate(${d.x},${d.y})`);
+            // });
+
+            simulation.nodes(allNodes)
+                .on("tick", () => {
+                    link.attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node.attr("transform", d => `translate(${d.x},${d.y})`);
+                });
+
+
+            const svg = d3.select("svg");
+            const defs = svg.append("defs");
+            const marker = svg.append("marker")
+                .attr("id", "arrow")
+                .attr("viewBox", "0 0 10 10")
+                .attr("refX", 16)
+                .attr("refY", 5)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto-start-reverse");
+
+            marker.append("path")
+                .attr("d", "M 0 0 L 10 5 L 0 10 Z")
+                .attr("fill", "#999");
+
+            simulation.force("link").links(links);
+            simulation.alpha(1).restart();
+        }
+    }
+
+    function adjustLinkPosition(source, target) {
+        let dx = target.x - source.x;
+        let dy = target.y - source.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+
+        let offsetX = (dx / distance) * circleRadius;
+        let offsetY = (dy / distance) * circleRadius;
+
+        return {
+            x1: source.x + offsetX,
+            y1: source.y + offsetY,
+            x2: target.x - offsetX,
+            y2: target.y - offsetY
+        };
+    }
+
+    function dragStarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragEnded(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    function distributeObjectsWithMargin(x, y) {
+        if (y <= 0) {
+            throw new Error("y must be greater than 0");
+        }
+
+        let positions = [];
+
+        if (y === 1) {
+            positions.push(x / 2);
+        } else {
+            let margin = x / (y + 1);
+            let gap = (x - 2 * margin) / (y - 1);
+            let start = margin;
+
+            for (let i = 0; i < y; i++) {
+                positions.push(start + i * gap);
+            }
+        }
+
+        return positions;
+    }
+
+    function initializeGraph(nodes) {
+
+
+        let distances = distributeObjectsWithMargin(500, allNodes.length);
+
+        console.log(distances)
+
+        let nodeData = nodes.map((id, index) => ({
+            id,
+            x: width - 100,
+            y: distances[index]
+        }));
+
+        allNodes = nodeData;
+
+        let node = nodeGroup.selectAll(".node").data(nodeData);
+
+        console.log("Initial nodes:", nodeData);
+
+        node.exit().remove();
+        let nodeEnter = node.enter().append("g").attr("class", "node")
+            .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
+
+        nodeEnter.append("circle").attr("r", circleRadius);
+        nodeEnter.append("text")
+            .attr("x", 0)
+            .attr("y", -circleRadius - 5)
+            .text(d => d.id);
+
+        node = nodeEnter.merge(node);
+
+        simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id))
+            .force("charge", d3.forceManyBody());
+
+        simulation.nodes(nodeData).on("tick", () => {
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        simulation.alpha(1).restart();
+    }
+
+    document.getElementById("dropdown-container").addEventListener("change", function() {
+        let key = Array.from(document.querySelectorAll("select")).map(s => s.getAttribute("data-category") + ":" + s.value).join("|");
+        fetch(`/api/getData?key=${encodeURIComponent(key)}`)
+            .then(response => response.json())
+            .then(data => updateGraph(data));
+    });
+
+    fetch("/api/getAllNodes")
+        .then(response => response.json())
+        .then(nodes => {
+            allNodes = nodes;
+            initializeGraph(allNodes)
+        });
+
+</script>
+
+</body>
+</html>

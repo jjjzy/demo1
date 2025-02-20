@@ -20,72 +20,109 @@
             stroke: #999;
             stroke-opacity: 0.6;
             stroke-width: 2px;
+            marker-end: url(#arrow);
+        }
+        text {
+            font-size: 12px;
+            text-anchor: middle; /* 确保文本居中对齐 */
+            fill: black;
         }
     </style>
 </head>
 <body>
 
-<h2>选择数据 Key 以更新图形</h2>
-
 <div id="dropdown-container">
     <div th:each="dropdown : ${dropdownOptions}">
         <label th:text="${dropdown['category']} + ':'"></label>
         <select th:attr="data-category=${dropdown['category']}">
+            <option value="">Please select</option>
             <option th:each="option : ${dropdown['options']}" th:value="${option}" th:text="${option}"></option>
         </select>
         <br>
     </div>
 </div>
 
-<p><strong>当前 Key:</strong> <span id="key-display"></span></p>
-
-<svg></svg>
+<svg>
+    <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="16" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#999"></path>
+        </marker>
+    </defs>
+</svg>
 
 <script th:inline="javascript">
     const width = window.innerWidth, height = 500;
+    const centerY = height / 2;
+    const circleRadius = 10; // 固定圆的大小
+
     const svg = d3.select("svg").attr("width", width).attr("height", height);
-    const simulation = d3.forceSimulation()
-        .force("link", d3.forceLink().id(d => d.id).distance(100))
-        .force("charge", d3.forceManyBody().strength(-300))
-        .force("center", d3.forceCenter(width / 2, height / 2));
+
+    const simulation = d3.forceSimulation();
 
     let linkGroup = svg.append("g").attr("class", "links");
     let nodeGroup = svg.append("g").attr("class", "nodes");
 
-    function updateGraph(data) {
+    function transformEdges(rawEdges) {
         let nodes = [];
         let links = [];
 
-        Object.keys(data).forEach(source => {
-            let targets = data[source];
-            targets.forEach(target => {
-                nodes.push({ id: source });
-                nodes.push({ id: target });
-                links.push({ source, target });
+        Object.keys(rawEdges).forEach(edge => {
+            rawEdges[edge].forEach(node => {
+                nodes.push(node);
             });
         });
 
-        nodes = Array.from(new Set(nodes.map(d => d.id))).map(id => ({ id }));
+        for (let i = 0; i < nodes.length - 1; i++) {
+            links.push({ source: nodes[i], target: nodes[i + 1] });
+        }
+
+        return { nodes, links };
+    }
+
+    function updateGraph(rawEdges) {
+        const { nodes, links } = transformEdges(rawEdges);
+
+        let nodeData = nodes.map((id, index) => ({
+            id,
+            x: 100 + index * ((width - 200) / (nodes.length - 1)),
+            y: centerY
+        }));
 
         let link = linkGroup.selectAll(".link").data(links);
-        let node = nodeGroup.selectAll(".node").data(nodes);
+        let node = nodeGroup.selectAll(".node").data(nodeData);
 
         link.exit().remove();
-        link.enter().append("line").attr("class", "link").merge(link);
+        link.enter().append("line")
+            .attr("class", "link")
+            .attr("marker-end", "url(#arrow)")
+            .merge(link);
 
         node.exit().remove();
         let nodeEnter = node.enter().append("g").attr("class", "node")
             .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
 
-        nodeEnter.append("circle").attr("r", 10);
-        nodeEnter.append("text").attr("x", 12).attr("y", 4).text(d => d.id);
+        nodeEnter.append("circle").attr("r", circleRadius);
+
+        // 让文本在 node 上方（-circleRadius - 5） 或者下方（circleRadius + 15）
+        nodeEnter.append("text")
+            .attr("x", 0)  // 保持 x 轴对齐
+            .attr("y", -circleRadius - 5) // 上方显示
+            // .attr("y", circleRadius + 15) // 下方显示（如果想要在下方，取消上面一行，启用这一行）
+            .text(d => d.id);
 
         node = nodeEnter.merge(node);
         link = linkGroup.selectAll(".link");
 
-        simulation.nodes(nodes).on("tick", () => {
-            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-                .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        simulation.force("link", d3.forceLink().id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-50))
+            // .force("y", d3.forceY(centerY).strength(1));
+
+        simulation.nodes(nodeData).on("tick", () => {
+            link.attr("x1", d => adjustLinkPosition(d.source, d.target).x1)
+                .attr("y1", d => adjustLinkPosition(d.source, d.target).y1)
+                .attr("x2", d => adjustLinkPosition(d.source, d.target).x2)
+                .attr("y2", d => adjustLinkPosition(d.source, d.target).y2);
 
             node.attr("transform", d => `translate(${d.x},${d.y})`);
         });
@@ -94,28 +131,90 @@
         simulation.alpha(1).restart();
     }
 
+    function adjustLinkPosition(source, target) {
+        let dx = target.x - source.x;
+        let dy = target.y - source.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+
+        let offsetX = (dx / distance) * circleRadius;
+        let offsetY = (dy / distance) * circleRadius;
+
+        return {
+            x1: source.x + offsetX,
+            y1: source.y + offsetY,
+            x2: target.x - offsetX,
+            y2: target.y - offsetY
+        };
+    }
+
     function dragStarted(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
-        d.fy = d.y;
+        d.fy = centerY;
     }
 
     function dragged(event, d) {
         d.fx = event.x;
-        d.fy = event.y;
+        d.fy = centerY;
     }
 
     function dragEnded(event, d) {
         if (!event.active) simulation.alphaTarget(0);
         d.fx = null;
-        d.fy = null;
+        d.fy = centerY;
+    }
+
+    function initializeGraph(nodes) {
+        console.log("All nodes:", nodes);
+        allNodes = nodes;
+
+        let nodeData = nodes.map((id, index) => ({
+            id,
+            x: width - 100, // 保证初始时在最右侧
+            y: 50 + index * 50 // 纵向排列
+        }));
+
+        let node = nodeGroup.selectAll(".node").data(nodeData);
+
+        console.log("Initial nodes:", nodeData);
+
+        node.exit().remove();
+        let nodeEnter = node.enter().append("g").attr("class", "node")
+            .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded));
+
+        nodeEnter.append("circle").attr("r", circleRadius);
+        nodeEnter.append("text")
+            .attr("x", 0)
+            .attr("y", -circleRadius - 5)
+            .text(d => d.id);
+
+        node = nodeEnter.merge(node);
+
+        // **关键点：确保 forceX 让所有 nodes 处于最右侧**
+        simulation
+            .force("link", d3.forceLink().id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-50))
+            // .force("y", d3.forceY(centerY).strength(1));
+            // .force("x", d3.forceX(width - 100).strength(1)) // 强制 nodes 保持在最右侧
+            // .force("y", d3.forceY().strength(0.1)); // 轻微调整 y，避免 forceSimulation 影响太大
+
+        simulation.nodes(nodeData).on("tick", () => {
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        simulation.alpha(1).restart();
     }
 
     document.getElementById("dropdown-container").addEventListener("change", function() {
         let key = Array.from(document.querySelectorAll("select")).map(s => s.getAttribute("data-category") + ":" + s.value).join("|");
-        document.getElementById("key-display").textContent = key;
-        fetch(`/api/getData?key=${encodeURIComponent(key)}`).then(response => response.json()).then(data => updateGraph(data));
+        fetch(`/api/getData?key=${encodeURIComponent(key)}`)
+            .then(response => response.json())
+            .then(data => updateGraph(data));
     });
+
+    fetch("/api/getAllNodes")
+        .then(response => response.json())
+        .then(nodes => initializeGraph(nodes));
 
 </script>
 

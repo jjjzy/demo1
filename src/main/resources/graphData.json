@@ -5,8 +5,11 @@
     "edge3": ["node3"],
     "edge4": ["node4"]
   },
-  "market:EU|language:FR|client:ABC|channel:APP|page:Desktop|placement:TOP|domain:domain2": {
-    "edgeA": ["nodeB"],
-    "edgeB": ["nodeC"]
+  "market:US|language:CN|client:MYCA|channel:WEB|page:Mobile|placement:ETD|domain:domain1": {
+    "edge1": ["node1"],
+    "edge2": ["node2"],
+    "edge3": ["node3"],
+    "edge4": ["node4"],
+    "edge5": ["node5"]
   }
 }
